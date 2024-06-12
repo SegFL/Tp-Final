@@ -5,7 +5,7 @@ from scipy.stats import bernoulli
 import matplotlib.pyplot as plt
 import random
 
-from Aux import autocorr_, psd, welch_psd, corr_cruzada
+from Auxiliar import autocorr_, psd, welch_psd, corr_cruzada
 
 
 def generar_proceso_bernoulli(N, p):
