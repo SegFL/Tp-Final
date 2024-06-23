@@ -1,6 +1,10 @@
 import numpy as np
 import math
-
+import numpy as np
+from numpy import random
+from numpy.random import normal
+from scipy.stats import bernoulli
+import matplotlib.pyplot as plt
 
 from matplotlib import pyplot as plt
 from scipy.signal import freqz
@@ -65,112 +69,86 @@ def welch_psd(x, largo_ventana, paso):
 
 def LMS(x, d, y,estimacion_inicial):
 
-    N = len(y)
+    N = len(x)
     y = np.array(y)
     x = np.array(x)
 
     xz=np.zeros(d)
-    x=np.concatenate((np.zeros(d-1),x))
+    y=np.concatenate((np.zeros(d-1),y))
 
-    w_estimado = np.zeros( (d,N+1))
+    w_estimado = np.zeros( (d,N-d+1))
     w_estimado[:,0]=estimacion_inicial
 
-    error = np.zeros(N)
-    u = 0.1
+    error = np.zeros(N+1)
+    u = 0.05
 
-    for i in range(N):
+    for i in range(N-d):
         #x_estimado[i-d] =
-        print("-----iteracion:",i)
-        print("X:",x[i:i+d])
+        #print("-----iteracion:",i)
+        #print("X:",x[i:i+d])
         error[i] = y[i] - np.dot(w_estimado[:,i], x[i:i+d])
-        print("Error:",error[i])
+        #print("Error:",error[i])
         w_estimado[:,i+1] = w_estimado[:,i] + u * x[i:i+d] * error[i]
-        print("W:",w_estimado[:,i+1])
+        #print("W:",w_estimado[:,i+1])
 
 
-    return w_estimado
-
-
-
-impulse_response=[0.5,1,0.2,0.1,0.05,0.01]
-
-N = 100
-p = 0.5  # Probabilidad de obtener un 1
-
-x=generar_proceso_bernoulli(N,p)
-
-#Calculo la respuesta del canal de comuniaciones (en esta caso el h que invente)
-y=np.convolve(x,impulse_response)
-d=len(impulse_response)
-x=np.concatenate((x,np.zeros(d)))
-d=len(impulse_response)
-#print(y)
-estimaciones= np.zeros((d,len(x)-d))
+    return w_estimado,error
 
 
 
+def iteracion_Jn(numero_realizaciones,largo,impulse_response,retardos,ecualizador_estimado,p,largo_ecualizador):
 
 
+    u_ruido=0
+    sigma_ruido=0.02
+    ecualizador_LMS= np. zeros(largo_ecualizador)
+
+    j=np.zeros((numero_realizaciones,largo+len(impulse_response)))
+
+    for k in range(numero_realizaciones):
+
+        #print("Largo de impulse_responde",len(impulse_response))
+
+        #Genero una nueva entrada y una nueva repsuesta
+        x_original=generar_proceso_bernoulli(largo,p)
+        #Corrige el largo de x_original para que funcion el LMS(agregar la misma cantiad de 0 que el largo del canal)
+
+        y_c=np.convolve(x_original,impulse_response)
+        #Genero nuevo ruido y se lo aplico a la salida
+        #print("Largo x_original",len(x_original))
+        #print("Largo y_c",len(y_c))
+
+        ruido=normal(u_ruido,sigma_ruido,len(y_c))
+        #print("Largo del ruido",len(ruido))
+        y_c=y_c+ruido
+
+        d=x_original[retardos:-1]
+        #Vuelvo a estimar el filtro LMS (ecualizador)
+        estimaciones,error_realizacion=LMS(y_c,8,d,ecualizador_LMS)
+        #print("Largo estimaciones",estimaciones.shape)
+        #print("Largo de los errores",error_realizacion.shape)
+        ecualizador_LMS= estimaciones[:,-1]
+        #LMS deuevle todas las N iteraciones de los coeficientes del ecualizador, de todas esas me quedo con la ultima
+
+        #print("Largo de canal_estimado",ecualizador_estimado.shape)
+
+        #Estimo de vuelta el filtro LMS con la nueva señal con ruido
+        #Vuelvo a calcular la salida del filtro LMS nuevo
+        z=np.convolve(y_c, ecualizador_LMS)
+        #print("Largo de x_prima", len(z))
+        #print("Largo de x_prima con corchetes", len(z[len(impulse_response) + len(ecualizador_estimado) - 2:]))
+        #print("Largo de x",len(x_original))
+
+        #Guardo el ecualidor optimo (para un retardo D=8)
+        if k==8:
+            ecualizador_optimo=ecualizador_LMS
 
 
-#x=[2,-1,0,1.5,-2,0,0.5,1,-1,0,-0.5,-1]
-#y=[1.5,-1.2,-1,2,-1.5,-1,1.5,0.9,-1.3,-0.5,0,-1]
-#d=3
+        #Me quedo con los ultimos N valores de x_prima, saco todos los puntos que agrega cada filtro por la convolucion
+        #error=(x_prima[len(impulse_response)+len(ecualizador_estimado)-(2+corrimiento) :len(x_prima)-corrimiento]-x_original)
+        #j[:,k]= (1 / numero_realizaciones) * ((abs(error) ** 2))
+        j[k,:]= (1/numero_realizaciones)*abs((error_realizacion)**2)
 
-estimaciones=LMS(x,d,y,np.zeros(d))
-#
-#for i in range(M-1):
-#    x=generar_proceso_bernoulli(N,p)
-#    y=np.convolve(x,impulse_response)
-#    coeficientes[:,i+1], estimacion_salida=LMS(x,d,y,coeficientes[:,i])
-#
+    j_total=np.sum(j,axis=0)
 
-
-
-
-
-
-
-
-# Fase de la respuesta en frecuencia
-# Crear un gráfico
-
-plt.figure(figsize=(10, 6))
-
-for i in range(len(estimaciones[:,0])):
-    plt.plot(estimaciones[i,:], marker='o', linestyle='-')
-
-
-plt.title('Coeficientes estimados del filtro ')
-plt.xlabel('Iteracion del LMS')
-plt.ylabel('Valor')
-plt.grid(True)
-
-
-
-
-# Graficar líneas horizontales para cada valor en el vector
-for i in impulse_response:
-    plt.axhline(y=i, color='r', linestyle='-')
-
-plt.ylim(0, max(impulse_response)*1.1)
-plt.show()
-
-
-#Ploteo la respuesta del canal y la del canal estimado con el LMS
-w, h = freqz(impulse_response)
-w_estim,h_estim=freqz(estimaciones[:,N])
-
-# Magnitud de la respuesta en frecuencia
-plt.figure()
-plt.plot(w, 20 * np.log10(abs(h)), 'b')
-plt.plot(w_estim, 20 * np.log10(abs(h_estim)), 'r')
-
-plt.title('Respuesta en Frecuencia')
-plt.xlabel('Frecuencia normalizada (rad/muestra)')
-plt.ylabel('Magnitud (dB)')
-plt.grid()
-
-
-
-plt.show()
+    return j_total,ecualizador_optimo
